@@ -67,7 +67,17 @@ namespace HEADSET
 
         private void DrawHook(Action<Fez, GameTime> original, Fez self, GameTime originalGameTime)
         {
-            var drawCallback = () => original(self, originalGameTime);
+            var gameTimeForLaterDrawCalls = new GameTime(
+                originalGameTime.TotalGameTime,
+                new TimeSpan(0)
+            );
+            bool firstDrawCallDone = false;
+            var drawCallback = () =>
+            {
+                var gameTime = firstDrawCallDone ? gameTimeForLaterDrawCalls : originalGameTime;
+                original(self, gameTime);
+                firstDrawCallDone = true;
+            };
             Render(drawCallback);
         }
 
