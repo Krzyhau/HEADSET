@@ -13,10 +13,10 @@ namespace HEADSET
 {
     internal class Renderer
     {
-        const int EyeDrawOrder = 9999999;
+        public static Renderer Instance { get; private set; }
+        public static RenderPerspective Perspective { get; private set; }
 
-        private Mesh leftEyePlane;
-        private Mesh rightEyePlane;
+        private Mesh previewPlane;
 
         private IDetour mainGameDrawLoopDetour;
 
@@ -27,46 +27,41 @@ namespace HEADSET
         public GraphicsDevice GraphicsDevice { get; }
         public ITargetRenderingManager TargetRenderer { get; private set; }
 
-        public RenderPerspective CurrentPerspective { get; private set; }
-
         public Renderer(VRMainController controller)
         {
+            Instance = this;
+            Perspective = RenderPerspective.Default;
+
             Controller = controller;
             GraphicsDevice = ServiceHelper.Get<IGraphicsDeviceService>().GraphicsDevice;
             TargetRenderer = ServiceHelper.Get<ITargetRenderingManager>();
 
-            Inject();
+            InjectHooks();
 
             leftEyeRenderHandle = TargetRenderer.TakeTarget();
             rightEyeRenderHandle = TargetRenderer.TakeTarget();
 
-            DrawActionScheduler.Schedule(delegate
-            {
-                leftEyePlane = CreateEyeRenderPlane(Vector3.Left * 0.5f);
-                rightEyePlane = CreateEyeRenderPlane(Vector3.Right * 0.5f);
-            });
+            DrawActionScheduler.Schedule(CreateEyeRenderPlane);
         }
 
-        private Mesh CreateEyeRenderPlane(Vector3 position)
+        private void CreateEyeRenderPlane()
         {
-            var planeMesh = new Mesh
+            previewPlane  = new Mesh
             {
                 DepthWrites = false,
                 AlwaysOnTop = true,
             };
-            planeMesh.AddFace(Vector3.One + Vector3.Up, position, FaceOrientation.Front, centeredOnOrigin: true);
+            previewPlane.AddFace(Vector3.One * 2, Vector3.Zero, FaceOrientation.Front, centeredOnOrigin: true);
 
-            planeMesh.Effect = new BasicPostEffect()
+            previewPlane.Effect = new BasicPostEffect()
             {
                 ForcedViewMatrix = Matrix.Identity,
                 ForcedProjectionMatrix = Matrix.Identity,
                 IgnoreCache = true
             };
-
-            return planeMesh;
         }
 
-        private void Inject()
+        private void InjectHooks()
         {
             var drawMethod = typeof(Fez).GetMethod("Draw", BindingFlags.NonPublic | BindingFlags.Instance);
             mainGameDrawLoopDetour = new Hook(drawMethod, DrawHook);
@@ -74,36 +69,31 @@ namespace HEADSET
 
         private void DrawHook(Action<Fez, GameTime> original, Fez self, GameTime originalGameTime)
         {
-            var drawCallback = (GameTime gameTime) => original(self, gameTime);
-            Render(new SplitTimeDrawCallbackProvider(drawCallback, originalGameTime));
+            var drawCallback = () => original(self, originalGameTime);
+            Render(drawCallback);
         }
 
-        void Render(SplitTimeDrawCallbackProvider callbackProvider)
+        void Render(Action drawCallback)
         {
-            var mainDrawCallback = callbackProvider.RequestCallback();
-            var leftEyeCallback = callbackProvider.RequestCallback();
-            var rightEyeCallback = callbackProvider.RequestCallback();
-
-            DrawToEyeTexture(RenderPerspective.LeftEye, leftEyeCallback);
-            DrawToEyeTexture(RenderPerspective.RightEye, rightEyeCallback);
+            DrawToEyeTexture(RenderPerspective.LeftEye, drawCallback);
+            DrawToEyeTexture(RenderPerspective.RightEye, drawCallback);
 
             DrawEyeOnScreen(RenderPerspective.LeftEye);
-            DrawEyeOnScreen(RenderPerspective.RightEye);
         }
 
         private void DrawToEyeTexture(RenderPerspective perspective, Action drawCallback)
         {
-            var eyeRenderTarget = GetRenderTargetForEye(perspective);
+            Perspective = perspective;
 
-            TargetRenderer.ScheduleHook(EyeDrawOrder, eyeRenderTarget);
-            CurrentPerspective = perspective;
+            var eyeRenderTarget = GetRenderTargetForEye(perspective);
+            TargetRenderer.ScheduleHook(9999999, eyeRenderTarget);
             drawCallback();
             TargetRenderer.Resolve(eyeRenderTarget, reschedule: false);
         }
 
         private void DrawEyeOnScreen(RenderPerspective perspective)
         {
-            if(leftEyePlane == null || rightEyePlane == null)
+            if(previewPlane == null)
             {
                 return;
             }
@@ -114,15 +104,8 @@ namespace HEADSET
             GraphicsDevice.PrepareDraw();
             GraphicsDevice.SetBlendingMode(BlendingMode.Opaque);
 
-            var plane = perspective switch
-            {
-                RenderPerspective.LeftEye => leftEyePlane,
-                RenderPerspective.RightEye => rightEyePlane,
-                _ => throw new System.NotImplementedException(),
-            };
-
-            plane.Texture.Set(eyeRenderTarget);
-            plane.Draw();
+            previewPlane.Texture.Set(eyeRenderTarget);
+            previewPlane.Draw();
         }
 
         private RenderTarget2D GetRenderTargetForEye(RenderPerspective perspective)
