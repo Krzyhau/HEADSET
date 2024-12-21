@@ -11,7 +11,7 @@ namespace HEADSET
         private void PopulateTweakList()
         {
             foreach (Type type in Assembly.GetExecutingAssembly().GetTypes()
-            .Where(t => t.IsClass && typeof(IVRTweak).IsAssignableFrom(t)))
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(IVRTweak).IsAssignableFrom(t)))
             {
                 IVRTweak tweak = (IVRTweak)Activator.CreateInstance(type);
                 tweaks.Add(tweak);
