@@ -46,7 +46,7 @@ namespace HEADSET
 
         private void CreateEyeRenderPlane()
         {
-            previewPlane  = new Mesh
+            previewPlane = new Mesh
             {
                 DepthWrites = false,
                 AlwaysOnTop = true,
@@ -93,7 +93,7 @@ namespace HEADSET
 
         private void DrawEyeOnScreen(RenderPerspective perspective)
         {
-            if(previewPlane == null)
+            if (previewPlane == null || perspective == RenderPerspective.Default)
             {
                 return;
             }
@@ -112,9 +112,9 @@ namespace HEADSET
         {
             return perspective switch
             {
-                RenderPerspective.LeftEye => leftEyeRenderHandle.Target,
-                RenderPerspective.RightEye => rightEyeRenderHandle.Target,
-                _ => throw new NotImplementedException(),
+                RenderPerspective.LeftEye => leftEyeRenderHandle?.Target,
+                RenderPerspective.RightEye => rightEyeRenderHandle?.Target,
+                _ => null
             };
         }
 
