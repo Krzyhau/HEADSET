@@ -4,6 +4,7 @@ using FezEngine.Services;
 using FezEngine.Structure;
 using FezEngine.Tools;
 using FezGame;
+using HEADSET.Tweaks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MonoMod.RuntimeDetour;
@@ -11,31 +12,28 @@ using System.Reflection;
 
 namespace HEADSET
 {
-    internal class Renderer
+    internal class Renderer : IVRTweak
     {
         public static Renderer Instance { get; private set; }
         public static RenderPerspective Perspective { get; private set; }
 
         private Mesh previewPlane;
-
         private IDetour mainGameDrawLoopDetour;
-
         private RenderTargetHandle leftEyeRenderHandle;
         private RenderTargetHandle rightEyeRenderHandle;
 
-        public VRMainController Controller { get; }
-        public GraphicsDevice GraphicsDevice { get; }
-        public ITargetRenderingManager TargetRenderer { get; private set; }
+        private GraphicsDevice GraphicsDevice => GraphicsDeviceService.GraphicsDevice;
+        [ServiceDependency] public IGraphicsDeviceService GraphicsDeviceService { private get; set; }
+        [ServiceDependency] public ITargetRenderingManager TargetRenderer { private get; set; }
 
-        public Renderer(VRMainController controller)
+        public Renderer()
         {
             Instance = this;
             Perspective = RenderPerspective.Default;
+        }
 
-            Controller = controller;
-            GraphicsDevice = ServiceHelper.Get<IGraphicsDeviceService>().GraphicsDevice;
-            TargetRenderer = ServiceHelper.Get<ITargetRenderingManager>();
-
+        public void Initialize()
+        {
             InjectHooks();
 
             leftEyeRenderHandle = TargetRenderer.TakeTarget();
@@ -75,10 +73,17 @@ namespace HEADSET
 
         void Render(Action drawCallback)
         {
+            if (!VRController.Active)
+            {
+                Perspective = RenderPerspective.Default;
+                drawCallback();
+                return;
+            }
+
             DrawToEyeTexture(RenderPerspective.LeftEye, drawCallback);
             DrawToEyeTexture(RenderPerspective.RightEye, drawCallback);
 
-            DrawEyeOnScreen(RenderPerspective.LeftEye);
+            DrawEyePreviewOnScreen(RenderPerspective.LeftEye);
         }
 
         private void DrawToEyeTexture(RenderPerspective perspective, Action drawCallback)
@@ -91,7 +96,7 @@ namespace HEADSET
             TargetRenderer.Resolve(eyeRenderTarget, reschedule: false);
         }
 
-        private void DrawEyeOnScreen(RenderPerspective perspective)
+        private void DrawEyePreviewOnScreen(RenderPerspective perspective)
         {
             if (previewPlane == null || perspective == RenderPerspective.Default)
             {
