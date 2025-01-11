@@ -12,10 +12,14 @@ namespace HEADSET
         private TweaksCollection tweaks = new();
         private bool openVrInitialized = false;
 
+        TrackedDevicePose_t[] renderPoses;
+        TrackedDevicePose_t[] gamePoses;
+
         public Fez Fez { get; private set; }
 
-        public static bool OpenVRActive => OpenVR.System != null && OpenVR.IsHmdPresent();
-        public static bool Active => OpenVRActive && Instance.openVrInitialized;
+        public static bool OpenVRReady => OpenVR.IsHmdPresent() && OpenVR.IsRuntimeInstalled();
+        public static bool OpenVRActive => OpenVRReady && OpenVR.Compositor != null && OpenVR.System != null;
+        public static bool Active => Instance.openVrInitialized;
 
         public VRController(Game game) : base(game)
         {
@@ -23,66 +27,104 @@ namespace HEADSET
 
             Fez = (Fez)game;
             Enabled = true;
+
+            renderPoses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
+            gamePoses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
         }
 
         public override void Initialize()
         {
             base.Initialize();
-            tweaks.Initialize();
+            TryBeginSession();
         }
 
         public override void Update(GameTime gameTime)
         {
             base.Update(gameTime);
-            EnsureProperOpenVRState();
-        }
 
-        private void EnsureProperOpenVRState()
-        {
-            bool openVrActive = OpenVR.System != null && OpenVR.IsHmdPresent();
-
-            if (!openVrActive && openVrInitialized)
+            if (openVrInitialized && !OpenVRActive)
             {
-                DeinitializeOpenVR();
-            }
-
-            else if(!openVrActive && !openVrInitialized)
-            {
-                TryInitializeOpenVR();
+                EndSession();
             }
         }
 
-        private void TryInitializeOpenVR()
+        public bool TryBeginSession()
         {
             if (openVrInitialized)
             {
+                return true;
+            }
+
+            var status = TryInitializeDevice();
+            if (status != EVRInitError.None)
+            {
+                Logger.Log("HEADSET", $"VR device failed to initialize. Error: {status}");
+                return false;
+            }
+
+            OpenVR.Compositor.FadeGrid(0.5f, false);
+            OpenVR.Compositor.FadeToColor(0.5f, 0, 0, 0, 0, false);
+
+            tweaks.Initialize();
+
+            Logger.Log("HEADSET", $"VR session is active.");
+
+            return true;
+        }
+
+        public void PrepareForNextFrame()
+        {
+            OpenVR.Compositor.WaitGetPoses(renderPoses, gamePoses);
+        }
+
+        public void EndSession()
+        {
+            if (!openVrInitialized)
+            {
                 return;
+            }
+
+            tweaks.Dispose();
+            DeinitializeDevice();
+
+            Logger.Log("HEADSET", $"VR session has ended.");
+        }
+
+        private EVRInitError TryInitializeDevice()
+        {
+            if (!OpenVRReady)
+            {
+                return EVRInitError.Init_HmdNotFound;
             }
 
             EVRInitError initError = EVRInitError.None;
             OpenVR.Init(ref initError, EVRApplicationType.VRApplication_Scene);
 
-            if (initError != EVRInitError.None || OpenVR.Compositor == null)
+            if (initError != EVRInitError.None || !OpenVRActive)
             {
                 OpenVR.Shutdown();
+                return initError;
             }
 
             openVrInitialized = true;
-            Logger.Log("HEADSET", $"OpenVR initialized.");
+            return EVRInitError.None;
         }
 
-        private void DeinitializeOpenVR()
+        private void DeinitializeDevice()
         {
+            if (!openVrInitialized)
+            {
+                return;
+            }
+
             OpenVR.Shutdown();
             openVrInitialized = false;
-            Logger.Log("HEADSET", $"OpenVR has been shut down.");
         }
 
         protected override void Dispose(bool disposing)
         {
-            tweaks.Dispose();
+            EndSession();
             base.Dispose(disposing);
-            OpenVR.Shutdown();
         }
     }
 }

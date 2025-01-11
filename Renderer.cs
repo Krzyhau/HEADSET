@@ -18,8 +18,9 @@ namespace HEADSET
         public static Renderer Instance { get; private set; }
         public static RenderPerspective Perspective { get; private set; }
 
-        private Mesh previewPlane;
         private IDetour mainGameDrawLoopDetour;
+
+        private Mesh previewPlane;
         private RenderTargetHandle leftEyeRenderHandle;
         private RenderTargetHandle rightEyeRenderHandle;
 
@@ -35,7 +36,7 @@ namespace HEADSET
 
         public void Initialize()
         {
-            InjectHooks();
+            InjectDrawHook();
 
             leftEyeRenderHandle = TargetRenderer.TakeTarget();
             rightEyeRenderHandle = TargetRenderer.TakeTarget();
@@ -60,7 +61,7 @@ namespace HEADSET
             };
         }
 
-        private void InjectHooks()
+        private void InjectDrawHook()
         {
             var drawMethod = typeof(Fez).GetMethod("Draw", BindingFlags.NonPublic | BindingFlags.Instance);
             mainGameDrawLoopDetour = new Hook(drawMethod, DrawHook);
@@ -91,10 +92,15 @@ namespace HEADSET
                 return;
             }
 
+            VRController.Instance.PrepareForNextFrame();
+
             DrawToEyeTexture(RenderPerspective.LeftEye, drawCallback);
             DrawToEyeTexture(RenderPerspective.RightEye, drawCallback);
 
             DrawEyePreviewOnScreen(RenderPerspective.LeftEye);
+
+            SubmitTextureToOpenVR(RenderPerspective.LeftEye);
+            SubmitTextureToOpenVR(RenderPerspective.RightEye);
         }
 
         private void DrawToEyeTexture(RenderPerspective perspective, Action drawCallback)
@@ -134,7 +140,7 @@ namespace HEADSET
             };
         }
 
-        private void SubmitTexturesToOpenVR()
+        private void SubmitTextureToOpenVR(RenderPerspective perspective)
         {
             var eyeBounds = new VRTextureBounds_t {
                 uMin = 0,
@@ -143,11 +149,14 @@ namespace HEADSET
                 vMax = 0
             };
 
-            var leftEyeTexture = GetVRTextureForEye(RenderPerspective.LeftEye);
-            var rightEyeTexture = GetVRTextureForEye(RenderPerspective.RightEye);
+            var eyeVRTexture = GetVRTextureForEye(perspective);
+            if(eyeVRTexture.handle == IntPtr.Zero)
+            {
+                return;
+            }
 
-            OpenVR.Compositor.Submit(EVREye.Eye_Left, ref leftEyeTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
-            OpenVR.Compositor.Submit(EVREye.Eye_Right, ref rightEyeTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
+            EVREye eye = perspective is RenderPerspective.LeftEye ? EVREye.Eye_Left : EVREye.Eye_Right;
+            OpenVR.Compositor.Submit(eye, ref eyeVRTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
         }
 
         private Texture_t GetVRTextureForEye(RenderPerspective perspective)
