@@ -29,6 +29,7 @@
 
     <Copy SourceFiles="$(TargetDir)$(TargetName).dll;$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
     <Copy SourceFiles="$(ProjectDir)Metadata.xml" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
+    <Copy SourceFiles="$(ProjectDir)OpenVR/openvr_api.dll" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
   </Target>
 
   <ItemGroup>

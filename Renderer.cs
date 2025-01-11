@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MonoMod.RuntimeDetour;
 using System.Reflection;
+using Valve.VR;
 
 namespace HEADSET
 {
@@ -131,6 +132,50 @@ namespace HEADSET
                 RenderPerspective.RightEye => rightEyeRenderHandle?.Target,
                 _ => null
             };
+        }
+
+        private void SubmitTexturesToOpenVR()
+        {
+            var eyeBounds = new VRTextureBounds_t {
+                uMin = 0,
+                uMax = 1,
+                vMin = 1,
+                vMax = 0
+            };
+
+            var leftEyeTexture = GetVRTextureForEye(RenderPerspective.LeftEye);
+            var rightEyeTexture = GetVRTextureForEye(RenderPerspective.RightEye);
+
+            OpenVR.Compositor.Submit(EVREye.Eye_Left, ref leftEyeTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
+            OpenVR.Compositor.Submit(EVREye.Eye_Right, ref rightEyeTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
+        }
+
+        private Texture_t GetVRTextureForEye(RenderPerspective perspective)
+        {
+            return new Texture_t
+            {
+                handle = GetTextureHandleForEye(perspective),
+                eType = ETextureType.OpenGL,
+                eColorSpace = EColorSpace.Auto,
+            };
+        }
+
+        private IntPtr GetTextureHandleForEye(RenderPerspective perspective)
+        {
+            var renderTarget = GetRenderTargetForEye(RenderPerspective.LeftEye);
+
+            var textureProperty = typeof(Texture).GetField("texture", BindingFlags.NonPublic | BindingFlags.Instance);
+            var texture = textureProperty.GetValue(renderTarget);
+
+            if (texture == null)
+            {
+                return IntPtr.Zero;
+            }
+
+            var handleProperty = texture.GetType().GetProperty("Handle", BindingFlags.Public | BindingFlags.Instance);
+            uint textureHandle = (uint)handleProperty.GetValue(texture);
+
+            return (IntPtr)textureHandle;
         }
 
         public void Dispose()
