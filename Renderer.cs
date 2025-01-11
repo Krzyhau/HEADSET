@@ -93,6 +93,7 @@ namespace HEADSET
             }
 
             VRController.Instance.PrepareForNextFrame();
+            EnsureProperRenderTargetsResolution();
 
             DrawToEyeTexture(RenderPerspective.LeftEye, drawCallback);
             DrawToEyeTexture(RenderPerspective.RightEye, drawCallback);
@@ -101,6 +102,21 @@ namespace HEADSET
 
             SubmitTextureToOpenVR(RenderPerspective.LeftEye);
             SubmitTextureToOpenVR(RenderPerspective.RightEye);
+        }
+
+        private void EnsureProperRenderTargetsResolution()
+        {
+            uint width = 0;
+            uint height = 0;
+            OpenVR.System.GetRecommendedRenderTargetSize(ref width, ref height);
+
+            var currentViewport = GraphicsDevice.Viewport;
+            if (currentViewport.Width != width || currentViewport.Height != height)
+            {
+                GraphicsDevice.PresentationParameters.BackBufferWidth = (int)width;
+                GraphicsDevice.PresentationParameters.BackBufferHeight = (int)height;
+                GraphicsDevice.SetupViewport();
+            }
         }
 
         private void DrawToEyeTexture(RenderPerspective perspective, Action drawCallback)
