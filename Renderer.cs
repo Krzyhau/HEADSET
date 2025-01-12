@@ -193,9 +193,7 @@ namespace HEADSET
             {
                 return;
             }
-
-            EVREye eye = perspective is RenderPerspective.LeftEye ? EVREye.Eye_Left : EVREye.Eye_Right;
-            OpenVR.Compositor.Submit(eye, ref eyeVRTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
+            OpenVR.Compositor.Submit(perspective.ToVREye(), ref eyeVRTexture, ref eyeBounds, EVRSubmitFlags.Submit_Default);
         }
 
         private Texture_t GetVRTextureForEye(RenderPerspective perspective)
