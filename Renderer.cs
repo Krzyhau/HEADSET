@@ -210,7 +210,7 @@ namespace HEADSET
 
         private IntPtr GetTextureHandleForEye(RenderPerspective perspective)
         {
-            var renderTarget = GetRenderTargetForEye(RenderPerspective.LeftEye);
+            var renderTarget = GetRenderTargetForEye(perspective);
 
             var textureProperty = typeof(Texture).GetField("texture", BindingFlags.NonPublic | BindingFlags.Instance);
             var texture = textureProperty.GetValue(renderTarget);
