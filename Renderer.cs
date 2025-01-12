@@ -19,6 +19,7 @@ namespace HEADSET
         public static RenderPerspective Perspective { get; private set; }
 
         private IDetour mainGameDrawLoopDetour;
+        private IDetour viewportSetupDetour;
 
         private Mesh previewPlane;
         private RenderTargetHandle leftEyeRenderHandle;
@@ -36,12 +37,15 @@ namespace HEADSET
 
         public void Initialize()
         {
+            InjectViewportSetup();
             InjectDrawHook();
 
             leftEyeRenderHandle = TargetRenderer.TakeTarget();
             rightEyeRenderHandle = TargetRenderer.TakeTarget();
 
             DrawActionScheduler.Schedule(CreateEyeRenderPlane);
+
+            GraphicsDevice.SetupViewport();
         }
 
         private void CreateEyeRenderPlane()
@@ -55,10 +59,38 @@ namespace HEADSET
 
             previewPlane.Effect = new BasicPostEffect()
             {
-                ForcedViewMatrix = Matrix.Identity,
-                ForcedProjectionMatrix = Matrix.Identity,
                 IgnoreCache = true
             };
+        }
+
+        private void InjectViewportSetup()
+        {
+            var setupViewportMethod = typeof(SettingsManager).GetMethod("SetupViewport", BindingFlags.Static | BindingFlags.Public);
+            viewportSetupDetour = new Hook(setupViewportMethod, SetupViewportHook);
+        }
+
+        private void SetupViewportHook(Action<GraphicsDevice> original, GraphicsDevice device)
+        {
+            if (!VRController.Active)
+            {
+                original(device);
+                return;
+            }
+
+            uint width = 0;
+            uint height = 0;
+            OpenVR.System.GetRecommendedRenderTargetSize(ref width, ref height);
+
+            int lastWidth = device.PresentationParameters.BackBufferWidth;
+            int lastHeight = device.PresentationParameters.BackBufferHeight;
+
+            device.PresentationParameters.BackBufferWidth = (int)width;
+            device.PresentationParameters.BackBufferHeight = (int)height;
+
+            original(device);
+
+            device.PresentationParameters.BackBufferWidth = lastWidth;
+            device.PresentationParameters.BackBufferHeight = lastHeight;
         }
 
         private void InjectDrawHook()
@@ -93,7 +125,6 @@ namespace HEADSET
             }
 
             VRController.Instance.PrepareForNextFrame();
-            EnsureProperRenderTargetsResolution();
 
             DrawToEyeTexture(RenderPerspective.LeftEye, drawCallback);
             DrawToEyeTexture(RenderPerspective.RightEye, drawCallback);
@@ -102,21 +133,6 @@ namespace HEADSET
 
             SubmitTextureToOpenVR(RenderPerspective.LeftEye);
             SubmitTextureToOpenVR(RenderPerspective.RightEye);
-        }
-
-        private void EnsureProperRenderTargetsResolution()
-        {
-            uint width = 0;
-            uint height = 0;
-            OpenVR.System.GetRecommendedRenderTargetSize(ref width, ref height);
-
-            var currentViewport = GraphicsDevice.Viewport;
-            if (currentViewport.Width != width || currentViewport.Height != height)
-            {
-                GraphicsDevice.PresentationParameters.BackBufferWidth = (int)width;
-                GraphicsDevice.PresentationParameters.BackBufferHeight = (int)height;
-                GraphicsDevice.SetupViewport();
-            }
         }
 
         private void DrawToEyeTexture(RenderPerspective perspective, Action drawCallback)
@@ -142,8 +158,15 @@ namespace HEADSET
             GraphicsDevice.PrepareDraw();
             GraphicsDevice.SetBlendingMode(BlendingMode.Opaque);
 
-            previewPlane.Texture.Set(eyeRenderTarget);
+            previewPlane.Texture = eyeRenderTarget;
+
+            int displayWidth = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int displayHeight = GraphicsDevice.PresentationParameters.BackBufferHeight;
+
+            var lastViewport = GraphicsDevice.Viewport;
+            GraphicsDevice.Viewport = new Viewport(0, 0, displayWidth, displayHeight);
             previewPlane.Draw();
+            GraphicsDevice.Viewport = lastViewport;
         }
 
         private RenderTarget2D GetRenderTargetForEye(RenderPerspective perspective)
@@ -209,6 +232,7 @@ namespace HEADSET
             TargetRenderer.ReturnTarget(rightEyeRenderHandle);
 
             mainGameDrawLoopDetour.Dispose();
+            viewportSetupDetour.Dispose();
         }
     }
 }
