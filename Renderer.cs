@@ -18,6 +18,10 @@ namespace HEADSET
         public static Renderer Instance { get; private set; }
         public static RenderPerspective Perspective { get; private set; }
 
+        private MethodInfo setupViewportMethod;
+        private MethodInfo gameDrawMethod;
+        private FieldInfo innerTextureField;
+
         private IDetour mainGameDrawLoopDetour;
         private IDetour viewportSetupDetour;
 
@@ -37,8 +41,8 @@ namespace HEADSET
 
         public void Initialize()
         {
-            InjectViewportSetup();
-            InjectDrawHook();
+            CollectReflections();
+            InjectHooks();
 
             leftEyeRenderHandle = TargetRenderer.TakeTarget();
             rightEyeRenderHandle = TargetRenderer.TakeTarget();
@@ -63,10 +67,16 @@ namespace HEADSET
             };
         }
 
-        private void InjectViewportSetup()
+        private void CollectReflections()
         {
-            var setupViewportMethod = typeof(SettingsManager).GetMethod("SetupViewport", BindingFlags.Static | BindingFlags.Public);
+            setupViewportMethod = typeof(SettingsManager).GetMethod("SetupViewport", BindingFlags.Static | BindingFlags.Public);
+            gameDrawMethod = typeof(Fez).GetMethod("Draw", BindingFlags.NonPublic | BindingFlags.Instance);
+            innerTextureField = typeof(Texture).GetField("texture", BindingFlags.NonPublic | BindingFlags.Instance);
+        }
+        private void InjectHooks()
+        {
             viewportSetupDetour = new Hook(setupViewportMethod, SetupViewportHook);
+            mainGameDrawLoopDetour = new Hook(gameDrawMethod, DrawHook);
         }
 
         private void SetupViewportHook(Action<GraphicsDevice> original, GraphicsDevice device)
@@ -91,12 +101,6 @@ namespace HEADSET
 
             device.PresentationParameters.BackBufferWidth = lastWidth;
             device.PresentationParameters.BackBufferHeight = lastHeight;
-        }
-
-        private void InjectDrawHook()
-        {
-            var drawMethod = typeof(Fez).GetMethod("Draw", BindingFlags.NonPublic | BindingFlags.Instance);
-            mainGameDrawLoopDetour = new Hook(drawMethod, DrawHook);
         }
 
         private void DrawHook(Action<Fez, GameTime> original, Fez self, GameTime originalGameTime)
@@ -210,15 +214,13 @@ namespace HEADSET
         {
             var renderTarget = GetRenderTargetForEye(perspective);
 
-            var textureProperty = typeof(Texture).GetField("texture", BindingFlags.NonPublic | BindingFlags.Instance);
-            var texture = textureProperty.GetValue(renderTarget);
-
+            var texture = innerTextureField.GetValue(renderTarget);
             if (texture == null)
             {
                 return IntPtr.Zero;
             }
 
-            var handleProperty = texture.GetType().GetProperty("Handle", BindingFlags.Public | BindingFlags.Instance);
+            var handleProperty = texture.GetType().GetProperty("Handle");
             uint textureHandle = (uint)handleProperty.GetValue(texture);
 
             return (IntPtr)textureHandle;

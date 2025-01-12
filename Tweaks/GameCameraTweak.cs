@@ -8,17 +8,28 @@ namespace HEADSET.Tweaks
 {
     internal class GameCameraTweak : IVRTweak
     {
-        private IDetour cameraInterpolationCallback;
+        private IDetour cameraInterpolationDetour;
+
+        private MethodInfo cameraInterpolationMethod;
+        private FieldInfo cameraProjectionMatrixField;
+        private MethodInfo cameraOnProjectionChangedMethod;
 
         public void Initialize()
         {
+            CollectReflections();
             InjectIntoCamera();
+        }
+
+        private void CollectReflections()
+        {
+            cameraInterpolationMethod = typeof(DefaultCameraManager).GetMethod("InterpolationCallback", BindingFlags.Public | BindingFlags.Instance);
+            cameraProjectionMatrixField = typeof(CameraManager).GetField("projection", BindingFlags.NonPublic | BindingFlags.Instance);
+            cameraOnProjectionChangedMethod = typeof(DefaultCameraManager).GetMethod("OnProjectionChanged", BindingFlags.NonPublic | BindingFlags.Instance);
         }
 
         private void InjectIntoCamera()
         {
-            var cameraInterpolationMethod = typeof(DefaultCameraManager).GetMethod("InterpolationCallback", BindingFlags.Public | BindingFlags.Instance);
-            cameraInterpolationCallback = new Hook(cameraInterpolationMethod, CameraInterpolationCallbackHook);
+            cameraInterpolationDetour = new Hook(cameraInterpolationMethod, CameraInterpolationCallbackHook);
         }
 
         private void CameraInterpolationCallbackHook(Action<DefaultCameraManager, GameTime> original, DefaultCameraManager self, GameTime gameTime)
@@ -26,12 +37,9 @@ namespace HEADSET.Tweaks
             original(self, gameTime);
 
             Matrix projMatrix = GetProjectionMatrixForPerspective(Renderer.Perspective);
+            cameraProjectionMatrixField.SetValue(self, projMatrix);
 
-            var projectionField = typeof(CameraManager).GetField("projection", BindingFlags.NonPublic | BindingFlags.Instance);
-            projectionField.SetValue(self, projMatrix);
-
-            var onProjectionChangedMethod = typeof(DefaultCameraManager).GetMethod("OnProjectionChanged", BindingFlags.NonPublic | BindingFlags.Instance);
-            onProjectionChangedMethod.Invoke(self, new object[] {});
+            cameraOnProjectionChangedMethod.Invoke(self, new object[] {});
         }
 
         private Matrix GetProjectionMatrixForPerspective(RenderPerspective perspective)
@@ -70,7 +78,7 @@ namespace HEADSET.Tweaks
 
         public void Dispose()
         {
-            cameraInterpolationCallback.Dispose();
+            cameraInterpolationDetour.Dispose();
         }
     }
 }
