@@ -29,13 +29,32 @@
 
     <Copy SourceFiles="$(TargetDir)$(TargetName).dll;$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
     <Copy SourceFiles="$(ProjectDir)Metadata.xml" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
-    <Copy SourceFiles="$(ProjectDir)OpenVR/openvr_api.dll" DestinationFolder="$(ModCompileOutputDir)\" Retries="0" />
   </Target>
 
   <ItemGroup>
     <Compile Remove="out\**" />
     <EmbeddedResource Remove="out\**" />
     <None Remove="out\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="OpenVR\bin\androidarm64\libopenvr_api.so" />
+    <None Remove="OpenVR\bin\linux32\libopenvr_api.so" />
+    <None Remove="OpenVR\bin\linux64\libopenvr_api.so" />
+    <None Remove="OpenVR\bin\linuxarm64\libopenvr_api.so" />
+    <None Remove="OpenVR\bin\osx32\libopenvr_api.dylib" />
+    <None Remove="OpenVR\bin\win32\openvr_api.dll" />
+    <None Remove="OpenVR\bin\win64\openvr_api.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="OpenVR\bin\androidarm64\libopenvr_api.so" />
+    <EmbeddedResource Include="OpenVR\bin\linux32\libopenvr_api.so" />
+    <EmbeddedResource Include="OpenVR\bin\linux64\libopenvr_api.so" />
+    <EmbeddedResource Include="OpenVR\bin\linuxarm64\libopenvr_api.so" />
+    <EmbeddedResource Include="OpenVR\bin\osx32\libopenvr_api.dylib" />
+    <EmbeddedResource Include="OpenVR\bin\win32\openvr_api.dll" />
+    <EmbeddedResource Include="OpenVR\bin\win64\openvr_api.dll" />
   </ItemGroup>
 
   <ItemGroup>

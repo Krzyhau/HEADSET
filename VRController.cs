@@ -12,8 +12,8 @@ namespace HEADSET
         private TweaksCollection tweaks = new();
         private bool openVrInitialized = false;
 
-        TrackedDevicePose_t[] renderPoses;
-        TrackedDevicePose_t[] gamePoses;
+        private TrackedDevicePose_t[] renderPoses;
+        private TrackedDevicePose_t[] gamePoses;
 
         public Fez Fez { get; private set; }
 
@@ -35,6 +35,14 @@ namespace HEADSET
         public override void Initialize()
         {
             base.Initialize();
+
+            if (!OpenVRNativeLoader.TryToLoad())
+            {
+                Logger.Log("HEADSET", $"Unable to load native OpenVR library.");
+                Enabled = false;
+                return;
+            }
+
             TryBeginSession();
         }
 
@@ -124,6 +132,7 @@ namespace HEADSET
         protected override void Dispose(bool disposing)
         {
             EndSession();
+            OpenVRNativeLoader.Unload();
             base.Dispose(disposing);
         }
     }
